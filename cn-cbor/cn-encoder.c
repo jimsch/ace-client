@@ -18,7 +18,9 @@ extern "C" {
 #endif
 #include <string.h>
 #ifndef _MSC_VER
+#ifndef __MBED__
 #include <strings.h>
+#endif
 #endif
 #include <stdbool.h>
 #include <assert.h>

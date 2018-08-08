@@ -45,3 +45,6 @@ typedef struct {
     void *              callbackData;
     //  Add retransmit information here
 } CoapMessageItem;
+
+
+extern void KeySetup();

@@ -3,7 +3,11 @@
 */
 
 #include <stdlib.h>
+#ifndef __MBED__
 #include <memory.h>
+#else
+#include <stddef.h>
+#endif
 #include <stdio.h>
 #include <assert.h>
 

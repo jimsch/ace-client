@@ -1,13 +1,15 @@
 #include <string>
 #include <stddef.h>
 #include <mbed.h>
-#include <FreescaleIAP.h>
 #include <sn_coap_protocol.h>
 #include <sn_coap_header.h>
 
 #include "cn-cbor.h"
 #include "oscore.h"
 #include "cose.h"
+#include "hkdf.h"
+#include "mbedtls/sha256.h"
+#include "cn-cbor-aux.h"
 
  //   COSE_Algorithm_AES_CCM_16_64_128 = 10,
  
@@ -279,16 +281,27 @@ sn_coap_hdr_s * OscoreResponse(sn_coap_hdr_s * coap_outer_ptr, OscoreMsgMatch * 
 }
 
 
+#if 0
 void WriteToFlash()
 {
-    int address = flash_size() - SECTOR_SIZE;
+    FlashIAP flash;
 
-    printf("Starting\n");
-    erase_sector(address);
-
-    program_flash(address, rgb, cb);
+    flash.init();
     
+    const uint32_t page_size = flash.get_sector_size();
+    uint32_t address = flash.get_flash_start() + flash.get_flash_size();
+    address = address - flash.get_sectorSize(address-1);
+    
+    int address = flash_size() - SECTOR_SIZE;
+    
+    printf("Starting\n");
+    flash.erase(address, flash.get_sectorsize(address));
+
+    flash.program(data, address, page_size);
+    
+    flash.deinit();
 }
+#endif
 
 
 /*  STRUCTURE
@@ -306,6 +319,7 @@ Recipient ID
 Next Replay window Start
 
 */
+/*
 
 info = [
           id : bstr,
@@ -314,5 +328,84 @@ info = [
           type : tstr,
           L : uint
       ]
+*/
 
+const uint8_t KeyData[] = {
+0x82, 0xA5, 0x01, 0x04, 0x06, 0x40, 0x07, 0x41, 0x01, 0x20, 0x50, 0x01, 0x02, 0x03, 0x04, 0x05,
+0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x09, 0x48, 0x9E, 0x7C, 0xA9,
+0x22, 0x23, 0x78, 0x63, 0x40, 0xA5, 0x01, 0x04, 0x02, 0x43, 0x6F, 0x73, 0x31, 0x06, 0x44, 0x63,
+0x6C, 0x49, 0x64, 0x07, 0x46, 0x61, 0x73, 0x53, 0x72, 0x49, 0x64, 0x20, 0x50, 0x10, 0x0F, 0x0E,
+0x0D, 0x0C, 0x0B, 0x0A, 0x09, 0x0A, 0x07, 0x06, 0x05, 0x04, 0x63, 0x62, 0x61
+};
+
+OscoreKey * DeriveOscoreContext(const cn_cbor * input)
+{
+    OscoreKey * keyOut = (OscoreKey *) calloc(sizeof(OscoreKey), 1);
+    cn_cbor * cborInfo = cn_cbor_array_create(NULL);
+    cn_cbor * cborKey = cn_cbor_mapget_int(input, -1);
+    
+    cn_cbor * tmp = cn_cbor_mapget_int(input, 6);       // Client ID
+	
+    cn_cbor_array_append(cborInfo, cn_cbor_data_create(tmp->v.bytes, tmp->length, NULL), NULL);
+    keyOut->senderID_ptr = (byte *) malloc(tmp->length);
+    keyOut->senderID_len = tmp->length;
+    memcpy(keyOut->senderID_ptr, tmp->v.bytes, tmp->length);
+
+    cn_cbor * cb_salt = cn_cbor_mapget_int(input, 9);      // Salt
+    const uint8_t * salt = NULL;
+    int cbSalt = 0;
+    if (cb_salt != NULL) {
+        salt = cb_salt->v.bytes;
+        cbSalt = cb_salt->length;
+    }
+
+        
+    cn_cbor_array_append(cborInfo, cn_cbor_null_create(NULL), NULL);
+
+    cn_cbor_array_append(cborInfo, cn_cbor_int_create(10, NULL), NULL);
+
+    cn_cbor_array_append(cborInfo, cn_cbor_string_create("Key", NULL), NULL);
+
+    cn_cbor_array_append(cborInfo, cn_cbor_int_create(128/8, NULL), NULL);
+
+    int cb = cn_cbor_encoder_write(NULL, 0, 0, cborInfo);
+    uint8_t * rgb = (uint8_t *) malloc(cb);
+    cn_cbor_encoder_write(rgb, 0, cb, cborInfo);
+
+    uint8_t * key = (uint8_t *) malloc(128/8);
+
+    const mbedtls_md_info_t * x = mbedtls_md_info_from_string("SHA256");
+
+    
+    mbedtls_hkdf(x, salt, cbSalt, cborKey->v.bytes, cborKey->length, rgb, cb, key, 128/8);
+
+    keyOut->key_ptr = key;
+    keyOut->key_len = 128/8;
+
+    cn_cbor_array_replace(cborInfo, 3, cn_cbor_string_create("IV", NULL), NULL);
+    cn_cbor_array_replace(cborInfo, 4, cn_cbor_int_create(13, NULL), NULL);
+
+    cn_cbor_encoder_write(rgb, 0, cb, cborInfo);
+    
+    uint8_t * iv = (uint8_t *) malloc(13);
+    mbedtls_hkdf(x, salt, cbSalt, cborKey->v.bytes, cborKey->length, rgb, cb, iv, 13);
+
+    keyOut->baseIV_ptr = iv;
+    keyOut->baseIV_len = 13;
+
+
+    return keyOut;
+}
+
+
+void KeySetup()
+{
+    const cn_cbor * cn = cn_cbor_decode(KeyData, sizeof(KeyData), NULL);
+    const cn_cbor * cn_key = cn->first_child;
+
+    while (cn_key != NULL) {
+        DeriveOscoreContext(cn_key);
+        cn_key = cn_key->next;
+    }
+}
     

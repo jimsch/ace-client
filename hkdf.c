@@ -24,10 +24,12 @@
 #include MBEDTLS_CONFIG_FILE
 #endif
 
+#define MBEDTLS_HKDF_C
+
 #if defined(MBEDTLS_HKDF_C)
 
 #include <string.h>
-#include "mbedtls/hkdf.h"
+#include "hkdf.h"
 #include "mbedtls/platform_util.h"
 
 int mbedtls_hkdf( const mbedtls_md_info_t *md, const unsigned char *salt,

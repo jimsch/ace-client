@@ -1,0 +1,16 @@
+# Emacs files
+*~
+*#
+\#*
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Build Files
+
+BUILD
+*.pyc
+

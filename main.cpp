@@ -218,6 +218,8 @@ int main()
     red = 1;
     blue = 1;
     green = 0;
+
+    KeySetup();
 #ifdef EASY_CONNECT
     NetworkInterface *network = easy_connect(true);
     if (!network) {
