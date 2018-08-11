@@ -31,6 +31,7 @@
 
 UDPSocket socket;           // Socket to talk CoAP over
 Thread recvfromThread;      // Thread to receive messages over CoAP
+Thread myMainThread(osPriorityNormal, 8*1024, NULL);
 
 DigitalOut red(LED1);
 DigitalOut blue(LED2);
@@ -38,6 +39,9 @@ DigitalOut green(LED3);
 
 extern void OscoreGet();
 EventQueue MyQueue;
+
+extern void DoOscoreGet();
+extern void DoOscoreGetResponse(int i);
 
 struct coap_s* coapHandle;
 coap_version_e coapVersion = COAP_VERSION_1;
@@ -175,15 +179,32 @@ bool SendMessage(sn_coap_hdr_s * coap_msg_ptr, void * data,  coap_msg_delivery c
 
 int MessageId = 5;
 
+int DispatchState = 0;
+
+void DispatchNext()
+{
+    switch (DispatchState) {
+    case 0:
+        DoOscoreGet();
+        break;
+
+    default:
+        break;
+    }
+    DispatchState += 1;
+}
+
 void DoGetResponse(int index)
 {
-    printf("Got a message back\n");
+    printf("\nGET RESPONSE\n");
     
     printCoapMsg(PendingMessages[index].sn_coap_response);
 
     if (PendingMessages[index].sn_coap_response->msg_code == COAP_MSG_CODE_RESPONSE_FORBIDDEN) {
         MakeAceRequest(&PendingMessages[index]);
     }
+
+    DispatchNext();
 }
 
 void DoGetMessage()
@@ -213,13 +234,14 @@ void DoGetMessage()
 EthernetInterface net;
 #endif // EASY_CONNECT
 
+extern void RunMain();
+
 int main()
 {
     red = 1;
     blue = 1;
     green = 0;
 
-    KeySetup();
 #ifdef EASY_CONNECT
     NetworkInterface *network = easy_connect(true);
     if (!network) {
@@ -253,38 +275,26 @@ int main()
     recvfromThread.start(&recvfromMain);
 
     // queue = mbed_event_queue();
-
+    myMainThread.start(RunMain);
+}    
     
-
+void RunMain()
+{
+    KeySetup();
+    
     //  Get message
 
     DoGetMessage();
 
 
     MyQueue.dispatch_forever();
-#if 0    
-    //  Try and do the OSCORE version of the get
-
-    while (MsgReceived == 0) {
-        red = 0;
-        wait(0.2);
-        red = 1;
-        wait(0.2);
-    }
-
-    red = 1;
-
-    MsgReceived = 0;
-    OscoreGet();
-#endif
     
-
     Thread::wait(osWaitForever);
     //  sn_coap_protool_destroy(coapHandle); // Clean up
 }
 
 
-void OscoreGet()
+void DoOscoreGet()
 {
    // Path to the resource we want to retrieve
     const char* coap_uri_path = "/oscore/hello/1"; // "/ace/helloWorld";
@@ -301,48 +311,25 @@ void OscoreGet()
     // See the receive code to verify that we get the same message ID back
     
     coap_res_ptr->msg_id = 8;
-    
-    OscoreMsgMatch * match = OscoreRequest(coap_res_ptr, &DefaultKey);
 
-    // Calculate the CoAP message size, allocate the memory and build the message
-    uint16_t message_len = sn_coap_builder_calc_needed_packet_data_size(coap_res_ptr);
-    printf("Calculated message length: %d bytes\n", message_len);
+    OscoreKey * useKey = FindOscoreKey((uint8_t *) "oscore", 6);
+    OscoreMsgMatch * match = OscoreRequest(coap_res_ptr, useKey);
 
-    uint8_t* message_ptr = (uint8_t*)malloc(message_len);
-    sn_coap_builder(message_ptr, coap_res_ptr);
-
-    // Uncomment to see the raw buffer that will be sent...
-    // printf("Message is: ");
-    // for (size_t ix = 0; ix < message_len; ix++) {
-    //     printf("%02x ", message_ptr[ix]);
-    // }
-    // printf("\n");
-
-    int scount = socket.sendto("192.168.0.12", 5683, message_ptr, message_len);
-    printf("Sent %d bytes to coap://192.168.0.12:5683\n", scount);
-
-    free(coap_res_ptr);
-    free(message_ptr);
-#if 0    
-    while (MsgReceived == 0) {
-        blue = 1;
-        wait(0.2);
-        blue = 0;
-        wait(0.2);
+    if (!SendMessage(coap_res_ptr, match, DoOscoreGetResponse)) {
+        free(coap_res_ptr);
     }
+}
 
-    blue = 1;
+void DoOscoreGetResponse(int index)
+{
+    blue = 0;
+    red = 1;
+    wait(0.2);
     
-    coap_res_ptr = OscoreResponse(NextMsg, match);
-    std::string payload((const char*)coap_res_ptr->payload_ptr, coap_res_ptr->payload_len);
+    sn_coap_hdr_s * coap_res_ptr = OscoreResponse(PendingMessages[index].sn_coap_response,
+                                  (OscoreMsgMatch *) PendingMessages[index].callbackData);
+    printf("\nOSCORE RESPONSE\n");
+    printCoapMsg(coap_res_ptr);
 
-    printf("\tparse status:     %d\n", coap_res_ptr->coap_status);
-    printf("\tmsg_id:           %d\n", coap_res_ptr->msg_id);
-    printf("\tmsg_code:         %d.%d\n", coap_res_ptr->msg_code >> 5, coap_res_ptr->msg_code & 0x1f);
-    printf("\tcontent_format:   %d\n", coap_res_ptr->content_format);
-    printf("\tpayload_len:      %d\n", coap_res_ptr->payload_len);
-    printf("\tcontent type:     %d\n", coap_res_ptr->content_format);
-    printf("\tpayload:          %s\n", payload.c_str());
-    printf("\toptions_list_ptr: %p\n", coap_res_ptr->options_list_ptr);
-#endif
+    Thread::wait(osWaitForever);
 }

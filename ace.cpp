@@ -6,6 +6,8 @@
 #include "oscore.h"
 #include "ace.h"
 
+#include "link-mem.h"
+
 
 extern bool SendMessage(sn_coap_hdr_s * coap_msg_ptr, void * data,  coap_msg_delivery callback);
 
@@ -105,23 +107,23 @@ void MakeAceRequest(CoapMessageItem * messageData)
         return;
     }
 
-    cn_cbor * ace_data = cn_cbor_decode(response->payload_ptr, response->payload_len, NULL);
+    cn_cbor * ace_data = cn_cbor_decode(response->payload_ptr, response->payload_len, NULL, NULL);
     if (ace_data == NULL) {
-        cn_cbor_free(ace_data);
+        cn_cbor_free(ace_data, NULL);
         return;
     }
 
-    cn_cbor * ace_request = cn_cbor_map_create(NULL);
+    cn_cbor * ace_request = cn_cbor_map_create(NULL, NULL);
 
     //  Copy over NONCE if it exists
     cn_cbor * tmp = cn_cbor_mapget_int(ace_data, 5);
     if (tmp != NULL) {
-        cn_cbor_mapput_int(ace_request, 5, tmp, NULL);
+        cn_cbor_mapput_int(ace_request, 5, tmp, NULL, NULL);
     }
 
-    cn_cbor_mapput_int(ace_request, 18, cn_cbor_int_create(2, NULL), NULL);  // grant_type
-    cn_cbor_mapput_int(ace_request, 3, cn_cbor_string_create("aud2", NULL), NULL); // audience
-    cn_cbor_mapput_int(ace_request, 12, cn_cbor_string_create("read", NULL), NULL); // scope
+    cn_cbor_mapput_int(ace_request, 18, cn_cbor_int_create(2, NULL, NULL), NULL, NULL);  // grant_type
+    cn_cbor_mapput_int(ace_request, 3, cn_cbor_string_create("aud2", NULL, NULL), NULL, NULL); // audience
+    cn_cbor_mapput_int(ace_request, 12, cn_cbor_string_create("read", NULL, NULL), NULL, NULL); // scope
 
     // Parse out the URL
 

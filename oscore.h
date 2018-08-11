@@ -1,6 +1,10 @@
 typedef uint8_t byte;
 
-typedef struct {
+typedef struct oscoreKey {
+	  struct oscoreKey * next;
+	  int    save;
+    byte * kid_ptr;
+    int    kid_len;
     byte * key_ptr;
     int    key_len;
     int    algorithm;
@@ -20,8 +24,6 @@ typedef struct {
     int    partialIV_len;
     OscoreKey * key_ptr;
 } OscoreMsgMatch;
-
-extern OscoreKey DefaultKey;
 
 OscoreMsgMatch * OscoreRequest(sn_coap_hdr_s *, OscoreKey *);
 sn_coap_hdr_s * OscoreResponse(sn_coap_hdr_s *, OscoreMsgMatch *);
@@ -48,3 +50,5 @@ typedef struct {
 
 
 extern void KeySetup();
+
+OscoreKey * FindOscoreKey(const uint8_t * id, int length);

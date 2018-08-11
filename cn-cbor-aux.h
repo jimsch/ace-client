@@ -15,7 +15,7 @@ extern "C" {
  * @return                      The old value
  */
 
-extern bool /*cn_cbor * */ cn_cbor_array_replace(cn_cbor * cb_array, int index, cn_cbor * cb_value, cn_cbor_errback * errp);
+extern bool /*cn_cbor * */ cn_cbor_array_replace(cn_cbor * cb_array, cn_cbor * cb_value, int index, cn_cbor_errback * errp);
 
 #ifdef  __cplusplus
 }
